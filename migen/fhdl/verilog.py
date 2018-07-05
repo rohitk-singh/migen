@@ -200,6 +200,25 @@ def _printheader(f, ios, name, ns, attr_translate,
     targets = list_targets(f) | special_outs
     wires, comb_regs = _list_comb_wires_regs(f)
     wires |= special_outs
+
+    special_outs_only = list_special_ios(f, False, True, False)  # Strictly outs
+    groups = group_by_targets(f.comb)
+    for g in groups:
+        if len(g[1]) > 1 and all(list(map(lambda x : isinstance(x, _Assign), g[1]))):
+            if not g[0].isdisjoint(special_outs_only):
+                # This means signals in special_outs_only set are being used as
+                # target of combinational statement, but since it has multiple
+                # _Assign statements, it cannot be used as single `assign`. So,
+                # we use an always (*) block for this, and hence these signals
+                # should be removed from wires set because they are now `regs`.
+
+                # Note: We do not care for inouts since they are supposed to be wires
+                #
+                # Assumption: That all `Special` modules' targets are assigned by `_Assign`
+                #             instead of `If` or `Case` (which should ideally be true in
+                #             all cases)
+                wires -= g[0] & special_outs_only
+
     r = "module " + name + "(\n"
     firstp = True
     for sig in sorted(ios, key=lambda x: x.duid):
